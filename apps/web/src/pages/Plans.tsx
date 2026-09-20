@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useParams, Link, Navigate } from 'react-router-dom'
+import { useParams, Link, Navigate, useNavigate } from 'react-router-dom'
+import { useUser } from '@clerk/clerk-react'
 import { PlanCard } from '../components/product/PlanCard'
 import { Logo } from '../components/ui/Logo'
 import { Button } from '../components/ui/Button'
@@ -7,22 +8,30 @@ import { Avatar } from '../components/ui/Avatar'
 import { IconTile } from '../components/ui/IconTile'
 import { PRODUCTS, PLANS_BY_PRODUCT } from '../lib/data'
 import { productIcon } from '../components/product/icons'
+import { useSupabaseClient } from '../lib/useSupabaseClient'
+import { subscribeToPlan } from '../lib/queries'
+import { isClerkConfigured } from '../lib/env'
 
 const steps = [
   { label: 'Product', state: 'done' },
   { label: 'Plan', state: 'active' },
-  { label: 'Checkout', state: 'pending' },
   { label: 'Confirm', state: 'pending' },
 ] as const
 
 export default function Plans() {
   const { slug = '' } = useParams()
+  const navigate = useNavigate()
   const product = PRODUCTS.find((p) => p.slug === slug)
   const plans = PLANS_BY_PRODUCT[slug] ?? []
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('yearly')
   const [selectedPlanId, setSelectedPlanId] = useState(
     plans.find((p) => p.isPopular)?.id ?? plans[0]?.id ?? '',
   )
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const supabase = useSupabaseClient()
+  const { user } = isClerkConfigured ? useUser() : { user: null }
 
   if (!product) return <Navigate to="/products" replace />
   const selectedPlan = plans.find((p) => p.id === selectedPlanId)
@@ -31,6 +40,41 @@ export default function Plans() {
       ? selectedPlan.priceMonthly
       : selectedPlan.priceYearly
     : 0
+
+  async function handleConfirm() {
+    if (!product || !selectedPlan) return
+    setError(null)
+
+    // Without Clerk configured there's no real signed-in user; without
+    // Supabase configured there's nowhere to persist the subscription. In
+    // both cases fall back to a no-op success so the flow is still
+    // click-through-able during local scaffolding.
+    if (!supabase || !user) {
+      navigate('/dashboard')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await subscribeToPlan(supabase, {
+        userId: user.id,
+        email: user.primaryEmailAddress?.emailAddress ?? null,
+        fullName: user.fullName,
+        productId: product.id,
+        planId: selectedPlan.id,
+        billingCycle,
+      })
+      navigate('/dashboard')
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not complete this subscription. Please try again.',
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-surface-0 pb-28">
@@ -71,13 +115,13 @@ export default function Plans() {
             ))}
           </div>
 
-          <Avatar name="Jordan Diaz" size={34} />
+          <Avatar name={user?.fullName ?? 'Jordan Diaz'} size={34} />
         </div>
       </div>
 
       <div className="mx-auto max-w-[1200px] px-8 py-11">
         <span className="mb-2.5 block text-[12.5px] font-semibold uppercase tracking-wide text-ink-tertiary">
-          Choose a plan
+          {product.subscribed ? 'Manage subscription' : 'Choose a plan'}
         </span>
         <h1 className="mb-2 text-[30px] font-bold tracking-tight text-white">
           Select a plan for {product.name}
@@ -152,6 +196,12 @@ export default function Plans() {
           </div>
         </div>
 
+        {error && (
+          <p className="mt-6 rounded-md border border-line-strong bg-white/[0.04] px-4 py-3 text-[13.5px] text-white">
+            {error}
+          </p>
+        )}
+
         <p className="mt-7 text-[12.5px] text-ink-tertiary">
           Prices exclude applicable tax. By continuing you agree to the Apex{' '}
           <Link to="#" className="font-semibold text-white">
@@ -178,8 +228,8 @@ export default function Plans() {
               </span>
             </div>
           </div>
-          <Button variant="primary" size="md">
-            Continue to Checkout
+          <Button variant="primary" size="md" onClick={handleConfirm} disabled={submitting}>
+            {submitting ? 'Confirming…' : 'Confirm Subscription'}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-4 w-4">
               <path d="M5 12h14M13 6l6 6-6 6" />
             </svg>

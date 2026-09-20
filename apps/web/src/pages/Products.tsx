@@ -1,14 +1,37 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useUser } from '@clerk/clerk-react'
 import { MarketingNav } from '../components/layout/MarketingNav'
 import { ProductCard } from '../components/product/ProductCard'
 import { PRODUCTS } from '../lib/data'
+import { useSupabaseClient } from '../lib/useSupabaseClient'
+import { fetchProducts } from '../lib/queries'
+import { isClerkConfigured } from '../lib/env'
+import type { Product } from '../lib/types'
 
 const categories = ['All products', 'Automation', 'Analytics', 'Finance', 'Subscribed']
 
 export default function Products() {
   const [active, setActive] = useState('All products')
+  const [products, setProducts] = useState<Product[]>(PRODUCTS)
+  const supabase = useSupabaseClient()
+  const { user } = isClerkConfigured ? useUser() : { user: null }
 
-  const filtered = PRODUCTS.filter((p) => {
+  useEffect(() => {
+    if (!supabase) return
+    let cancelled = false
+    fetchProducts(supabase, user?.id)
+      .then((rows) => {
+        if (!cancelled && rows.length) setProducts(rows)
+      })
+      .catch(() => {
+        // Table not seeded yet, or RLS not configured — keep local fallback data.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [supabase, user?.id])
+
+  const filtered = products.filter((p) => {
     if (active === 'All products') return true
     if (active === 'Subscribed') return p.subscribed
     return p.category === active
@@ -20,8 +43,8 @@ export default function Products() {
       <div className="mx-auto max-w-[1200px] px-8 py-11 pb-24">
         <h1 className="mb-2 text-[30px] font-bold tracking-tight text-white">Products</h1>
         <p className="max-w-[560px] text-[15.5px] text-ink-secondary">
-          Browse the full Apex suite. Every product shares your Apex account, billing, and
-          access — subscribe and launch in seconds.
+          Everything in your Apex suite. Products you own are marked Subscribed — pick a plan
+          on anything else to add it to your account.
         </p>
 
         <div className="mt-7 flex flex-wrap gap-2.5">

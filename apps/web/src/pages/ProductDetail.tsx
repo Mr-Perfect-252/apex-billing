@@ -1,10 +1,16 @@
+import { useEffect, useState } from 'react'
 import { useParams, Link, Navigate } from 'react-router-dom'
+import { useUser } from '@clerk/clerk-react'
 import { MarketingNav } from '../components/layout/MarketingNav'
 import { Button } from '../components/ui/Button'
 import { Badge } from '../components/ui/Badge'
 import { IconTile } from '../components/ui/IconTile'
 import { PRODUCTS, PLANS_BY_PRODUCT } from '../lib/data'
 import { productIcon } from '../components/product/icons'
+import { useSupabaseClient } from '../lib/useSupabaseClient'
+import { fetchProduct } from '../lib/queries'
+import { isClerkConfigured } from '../lib/env'
+import type { Plan, Product } from '../lib/types'
 
 const ArrowRight = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" className="h-4 w-4">
@@ -14,10 +20,32 @@ const ArrowRight = (
 
 export default function ProductDetail() {
   const { slug = '' } = useParams()
-  const product = PRODUCTS.find((p) => p.slug === slug)
-  if (!product) return <Navigate to="/products" replace />
+  const supabase = useSupabaseClient()
+  const { user } = isClerkConfigured ? useUser() : { user: null }
 
-  const plans = PLANS_BY_PRODUCT[slug] ?? []
+  const fallbackProduct = PRODUCTS.find((p) => p.slug === slug)
+  const [product, setProduct] = useState<Product | undefined>(fallbackProduct)
+  const [plans, setPlans] = useState<Plan[]>(PLANS_BY_PRODUCT[slug] ?? [])
+
+  useEffect(() => {
+    if (!supabase) return
+    let cancelled = false
+    fetchProduct(supabase, slug, user?.id)
+      .then((result) => {
+        if (!cancelled && result) {
+          setProduct(result.product)
+          setPlans(result.plans)
+        }
+      })
+      .catch(() => {
+        // Fall back to local placeholder data below.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [supabase, slug, user?.id])
+
+  if (!product) return <Navigate to="/products" replace />
 
   return (
     <div className="min-h-screen bg-surface-0">
@@ -42,7 +70,7 @@ export default function ProductDetail() {
             <div className="flex gap-3">
               <Link to={`/products/${product.slug}/plans`}>
                 <Button variant="primary" size="md" icon={ArrowRight}>
-                  Select a Plan
+                  {product.subscribed ? 'Manage Subscription' : 'Select a Plan'}
                 </Button>
               </Link>
               <Button variant="outline" size="md">
@@ -53,7 +81,6 @@ export default function ProductDetail() {
         </div>
       </section>
 
-      {/* Live preview panel */}
       <section className="py-14">
         <div className="mx-auto max-w-[1200px] px-8">
           <div className="overflow-hidden rounded-lg border border-line-strong bg-surface-1">
@@ -82,7 +109,6 @@ export default function ProductDetail() {
         </div>
       </section>
 
-      {/* Plans preview */}
       {plans.length > 0 && (
         <section className="border-t border-line py-14">
           <div className="mx-auto max-w-[1200px] px-8">

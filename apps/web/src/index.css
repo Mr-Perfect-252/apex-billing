@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background-color: #000000;
+}
+
+* {
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+/* Optical compensation: light text on a pure black surface reads heavier
+   than the same weight on light. Antialiasing + no sub-400 weights keeps
+   body copy from looking blurred or over-bold. */
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

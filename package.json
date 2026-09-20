@@ -1,0 +1,17 @@
+{
+  "name": "apex-hub-labs",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Apex Hub Labs — unified multi-product SaaS platform. React (Vite) frontend, Supabase backend, Clerk auth.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=apps/web",
+    "lint": "npm run lint --workspace=apps/web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
